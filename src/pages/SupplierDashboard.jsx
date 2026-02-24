@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import VehicleTemplateSelector from '../components/supplier/VehicleTemplateSelector';
 
 export default function SupplierDashboard() {
+  const [user, setUser] = useState(null);
   const [supplier, setSupplier] = useState(null);
   const [isAddPartOpen, setIsAddPartOpen] = useState(false);
   const [editingPart, setEditingPart] = useState(null);
@@ -21,15 +22,17 @@ export default function SupplierDashboard() {
   const queryClient = useQueryClient();
 
   React.useEffect(() => {
-    loadSupplier();
+    loadUserAndSupplier();
   }, []);
 
-  // 🔥 FIX: Remove login, load any supplier publicly
-  const loadSupplier = async () => {
+  const loadUserAndSupplier = async () => {
     try {
-      const suppliers = await base44.entities.Supplier.list();
+      const u = await base44.auth.me();
+      setUser(u);
+      
+      const suppliers = await base44.entities.Supplier.filter({ email: u.email });
       if (suppliers.length > 0) {
-        setSupplier(suppliers[0]); // pick the first supplier for public mode
+        setSupplier(suppliers[0]);
       }
     } catch (e) {
       console.error(e);
@@ -56,7 +59,14 @@ export default function SupplierDashboard() {
     if (editingPart?.category_id && categories.length > 0) {
       const savedCategory = categories.find(cat => cat.id === editingPart.category_id);
       if (savedCategory?.parent_category_id) {
-        setSelectedParentCategory(savedCategory.parent_category_id);
+        const parent = categories.find(cat => 
+          !cat.parent_category_id && 
+          (cat.id === savedCategory.parent_category_id || 
+           cat.name?.toLowerCase().startsWith(savedCategory.parent_category_id))
+        );
+        if (parent) {
+          setSelectedParentCategory(parent.id);
+        }
       }
     } else if (!editingPart) {
       setSelectedParentCategory('');
@@ -64,7 +74,14 @@ export default function SupplierDashboard() {
   }, [editingPart, categories]);
 
   const parentCategories = categories.filter(cat => !cat.parent_category_id);
-  const subCategories = categories.filter(cat => cat.parent_category_id === selectedParentCategory);
+  
+  const selectedParent = parentCategories.find(cat => cat.id === selectedParentCategory);
+  const parentName = selectedParent?.name?.toLowerCase().split(' ')[0];
+  
+  const subCategories = categories.filter(cat => 
+    cat.parent_category_id && 
+    (cat.parent_category_id === selectedParentCategory || cat.parent_category_id === parentName)
+  );
 
   const createPartMutation = useMutation({
     mutationFn: (partData) => base44.entities.SparePart.create(partData),
@@ -97,10 +114,10 @@ export default function SupplierDashboard() {
   const handleSubmitPart = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-
+    
     const categoryId = formData.get('category_id');
     const selectedCategory = categories.find(cat => cat.id === categoryId);
-
+    
     const partData = {
       name: formData.get('name'),
       part_number: formData.get('part_number'),
@@ -130,16 +147,28 @@ export default function SupplierDashboard() {
     }
   };
 
-  // 🔥 FIX: user check removed — no login exists
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-600 mb-4">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!supplier) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center max-w-md">
           <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">No Supplier Found</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">No Supplier Account</h2>
           <p className="text-slate-600 mb-6">
-            At least one supplier must exist to use this dashboard.
+            You need to register as a supplier before accessing this dashboard.
           </p>
+          <Button onClick={() => window.location.href = '/SupplierRegister'}>
+            Register as Supplier
+          </Button>
         </div>
       </div>
     );
@@ -154,7 +183,7 @@ export default function SupplierDashboard() {
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Application Pending</h2>
           <p className="text-slate-600">
-            Your supplier application is under review.
+            Your supplier application is under review. You'll be able to add parts once approved by our admin team.
           </p>
         </div>
       </div>
@@ -168,26 +197,25 @@ export default function SupplierDashboard() {
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Account Suspended</h2>
           <p className="text-slate-600">
-            Your supplier account has been suspended.
+            Your supplier account has been suspended. Please contact support for more information.
           </p>
         </div>
       </div>
     );
   }
 
+  const totalRevenue = myParts.reduce((sum, part) => sum + (part.price * (part.quantity || 1)), 0);
   const activeParts = myParts.filter(p => p.status === 'active').length;
   const soldParts = myParts.filter(p => p.status === 'sold').length;
 
   return (
     <div className="min-h-screen bg-slate-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Supplier Dashboard</h1>
             <p className="text-slate-600 mt-1">Welcome back, {supplier.business_name}</p>
           </div>
-
           <Dialog open={isAddPartOpen} onOpenChange={setIsAddPartOpen}>
             <DialogTrigger asChild>
               <Button className="bg-amber-500 hover:bg-amber-600 text-black font-semibold">
@@ -199,13 +227,161 @@ export default function SupplierDashboard() {
               <DialogHeader>
                 <DialogTitle>{editingPart ? 'Edit Part' : 'Add New Part'}</DialogTitle>
               </DialogHeader>
-
-              {/* FORM UI KEPT EXACTLY SAME */}
               <form onSubmit={handleSubmitPart} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="name">Part Name *</Label>
+                    <Input
+                      id="name"
+                      name="name"
+                      defaultValue={editingPart?.name}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="part_number">Part Number</Label>
+                    <Input
+                      id="part_number"
+                      name="part_number"
+                      defaultValue={editingPart?.part_number}
+                    />
+                  </div>
+                </div>
 
-                {/* All original form fields unchanged */}
-                {/* ... fully preserved */}
-                
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    defaultValue={editingPart?.description}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="parent_category">Category</Label>
+                    <Select 
+                      value={selectedParentCategory} 
+                      onValueChange={(value) => setSelectedParentCategory(value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {parentCategories.map(cat => (
+                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="category_id">Subcategory</Label>
+                    <Select name="category_id" defaultValue={editingPart?.category_id}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select subcategory" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {subCategories.length > 0 ? (
+                          subCategories.map(cat => (
+                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value={null} disabled>Select a category first</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="condition">Condition *</Label>
+                    <Select name="condition" defaultValue={editingPart?.condition || 'used_good'} required>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="new">New</SelectItem>
+                        <SelectItem value="used_excellent">Used - Excellent</SelectItem>
+                        <SelectItem value="used_good">Used - Good</SelectItem>
+                        <SelectItem value="used_fair">Used - Fair</SelectItem>
+                        <SelectItem value="refurbished">Refurbished</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <VehicleTemplateSelector
+                  vehicles={vehicles}
+                  defaultMake={editingPart?.vehicle_make}
+                  defaultModel={editingPart?.vehicle_model}
+                  defaultVariant={editingPart?.vehicle_variant}
+                  defaultYearFrom={editingPart?.year_from}
+                  defaultYearTo={editingPart?.year_to}
+                />
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="price">Price ($) *</Label>
+                    <Input
+                      id="price"
+                      name="price"
+                      type="number"
+                      step="0.01"
+                      defaultValue={editingPart?.price}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="original_price">Original Price ($)</Label>
+                    <Input
+                      id="original_price"
+                      name="original_price"
+                      type="number"
+                      step="0.01"
+                      defaultValue={editingPart?.original_price}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="quantity">Quantity</Label>
+                    <Input
+                      id="quantity"
+                      name="quantity"
+                      type="number"
+                      defaultValue={editingPart?.quantity || 1}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="warranty_days">Warranty (days)</Label>
+                  <Input
+                    id="warranty_days"
+                    name="warranty_days"
+                    type="number"
+                    defaultValue={editingPart?.warranty_days || 0}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="images">Image URL</Label>
+                  <Input
+                    id="images"
+                    name="images"
+                    defaultValue={editingPart?.images?.[0]}
+                    placeholder="https://example.com/image.jpg"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button type="button" variant="outline" onClick={() => {
+                    setIsAddPartOpen(false);
+                    setEditingPart(null);
+                  }}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="bg-amber-500 hover:bg-amber-600 text-black">
+                    {editingPart ? 'Update Part' : 'Add Part'}
+                  </Button>
+                </div>
               </form>
             </DialogContent>
           </Dialog>
@@ -324,7 +500,6 @@ export default function SupplierDashboard() {
             )}
           </CardContent>
         </Card>
-
       </div>
     </div>
   );
