@@ -89,9 +89,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   const navigateToLogin = () => {
-    if (window.location.pathname === '/login') return; // prevent loop
-    base44.auth.redirectToLogin(window.location.href);
-  };
+  if (window.location.pathname === '/login') return; // prevent infinite loop
+
+  // Base44 hosted login (not /login on your frontend)
+  const currentUrl = window.location.href;
+  const base44LoginUrl =
+    `https://auto-parts-connect-15f58137.base44.app/login?from_url=${encodeURIComponent(currentUrl)}`;
+
+  window.location.href = base44LoginUrl;
+};
 
   return (
     <AuthContext.Provider value={{

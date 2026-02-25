@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Wrench, Loader2, MessageSquare, Zap, Shield, Search } from 'lucide-react';
 import ChatMessage from '../components/consulting/ChatMessage';
+import { useAuth } from '@/lib/AuthContext';
 
 const STARTER_PROMPTS = [
     "My car makes a grinding noise when braking",
@@ -16,6 +17,30 @@ const STARTER_PROMPTS = [
 ];
 
 export default function Consulting() {
+
+    // 🔥 ADDED AUTH CHECK (REQUIRED BY BASE44)
+    const { isAuthenticated, isLoadingAuth, navigateToLogin } = useAuth();
+
+    useEffect(() => {
+        if (!isLoadingAuth && !isAuthenticated) {
+            navigateToLogin();
+        }
+    }, [isAuthenticated, isLoadingAuth]);
+
+    if (isLoadingAuth) {
+        return (
+            <div className="min-h-screen flex items-center justify-center text-white">
+                Loading...
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) return null;
+    // 🔥 END AUTH CHECK
+
+
+    // --- YOUR ORIGINAL CODE STARTS ----
+
     const [conversation, setConversation] = useState(null);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -92,7 +117,6 @@ export default function Consulting() {
             {/* Chat Area */}
             <div className="flex-1 max-w-4xl w-full mx-auto px-4 py-6 flex flex-col">
 
-                {/* Empty state / starter */}
                 {messages.length === 0 && !loading && (
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex-1 flex flex-col items-center justify-center text-center">
                         <div className="w-20 h-20 bg-gradient-to-br from-amber-500 to-amber-600 rounded-3xl flex items-center justify-center mb-6 shadow-2xl shadow-amber-500/30">
@@ -124,7 +148,6 @@ export default function Consulting() {
                     </div>
                 )}
 
-                {/* Messages */}
                 {messages.length > 0 && (
                     <div className="flex-1">
                         <AnimatePresence>
