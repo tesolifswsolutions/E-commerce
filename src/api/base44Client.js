@@ -1,12 +1,13 @@
 import { createClient } from '@base44/sdk';
 import { appParams } from '@/lib/app-params';
 
-const { appId, token, appBaseUrl } = appParams;
+const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
-// Create a client with authentication DISABLED
+//Create a client with authentication required
 export const base44 = createClient({
   appId,
-  token,              // ok for agents
-  requiresAuth: true,  // 🔥 FIX: disable forced login redirect
-  appBaseUrl,
+  token,
+  functionsVersion,
+  requiresAuth: false,
+  appBaseUrl
 });
