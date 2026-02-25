@@ -7,6 +7,6 @@ const { appId, token, appBaseUrl } = appParams;
 export const base44 = createClient({
   appId,
   token,              // ok for agents
-  requiresAuth: false,  // 🔥 FIX: disable forced login redirect
+  requiresAuth: true,  // 🔥 FIX: disable forced login redirect
   appBaseUrl,
 });
